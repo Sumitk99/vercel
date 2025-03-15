@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 )
 
-func CloneRepo(GithubUrl, ProjectId string) {
+func CloneRepo(GithubUrl, ProjectId string) error {
 
 	currPath, err := os.Getwd()
 	directory := filepath.Join(currPath, constants.RepoPath, ProjectId)
@@ -18,9 +18,10 @@ func CloneRepo(GithubUrl, ProjectId string) {
 		Progress: os.Stdout,
 	})
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	fmt.Println("Repository cloned successfully!")
+	return nil
 }
 
 func GetAllFiles(FolderPath string) []string {

@@ -17,6 +17,7 @@ type Config struct {
 	AccessKeyID     string
 	SecretAccessKey string
 	EndPoint        string
+	RedisAddress    string
 }
 
 func main() {
@@ -28,9 +29,16 @@ func main() {
 	cfg.EndPoint = os.Getenv("R2_ENDPOINT")
 	cfg.AccessKeyID = os.Getenv("ACCESS_KEY_ID")
 	cfg.SecretAccessKey = os.Getenv("SECRET_ACCESS_KEY")
-
+	cfg.RedisAddress = os.Getenv("REDIS_ADDRESS")
+	log.Println(cfg.RedisAddress)
 	R2Client, err := server.ConnectToR2(cfg.AccessKeyID, cfg.SecretAccessKey, cfg.EndPoint)
-
+	if err != nil {
+		log.Fatalf("Error connecting to R2: %s", err.Error())
+	}
+	RedisClient, err := server.ConnectToRedis(cfg.RedisAddress)
+	if err != nil {
+		log.Fatalf("Error connecting to Redis: %s", err.Error())
+	}
 	router.Use(gin.Logger())
 
 	corsPolicy := cors.Config{
@@ -42,11 +50,11 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}
 	routes.SetupRoutes(router, &server.Server{
-		R2Client: R2Client,
+		R2Client:    R2Client,
+		RedisClient: RedisClient,
 	})
 
 	router.Use(cors.New(corsPolicy))
-	log.Println("Router Running on port: ", cfg.PORT)
 	err = router.Run(fmt.Sprintf("0.0.0.0:%s", cfg.PORT))
 	if err != nil {
 		log.Println(err.Error())

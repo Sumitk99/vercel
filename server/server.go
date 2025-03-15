@@ -9,13 +9,15 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/redis/go-redis/v9"
 	"log"
 	"os"
 	"path/filepath"
 )
 
 type Server struct {
-	R2Client *s3.Client
+	R2Client    *s3.Client
+	RedisClient *redis.Client
 }
 
 func ConnectToR2(AccessKeyID, SecretAccessKey, Endpoint string) (*s3.Client, error) {
@@ -42,6 +44,19 @@ func ConnectToR2(AccessKeyID, SecretAccessKey, Endpoint string) (*s3.Client, err
 	return client, nil
 }
 
+func ConnectToRedis(Address string) (*redis.Client, error) {
+	client := redis.NewClient(&redis.Options{
+		Addr:     Address,
+		Password: "",
+		DB:       0,
+	})
+	_, err := client.Ping(context.Background()).Result()
+	if err != nil {
+		return nil, err
+	}
+	return client, nil
+}
+
 func UploadToR2(R2Client *s3.Client, baseDir string, Files []string) error {
 	for _, file := range Files {
 		newFile, err := os.Open(file)
@@ -60,6 +75,15 @@ func UploadToR2(R2Client *s3.Client, baseDir string, Files []string) error {
 			return fmt.Errorf("failed to upload file: %w", err)
 		}
 
+	}
+	return nil
+}
+
+func PushToRedis(RedisClient *redis.Client, projectId string) error {
+	res := RedisClient.LPush(context.Background(), projectId)
+	err := res.Err()
+	if err != nil {
+		return err
 	}
 	return nil
 }
