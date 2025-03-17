@@ -1,15 +1,11 @@
 package main
 
 import (
-	"fmt"
-	"github.com/Sumitk99/vercel/routes"
-	"github.com/Sumitk99/vercel/server"
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
+	"github.com/Sumitk99/vercel/deploy-service/controllers"
+	"github.com/Sumitk99/vercel/deploy-service/server"
 	"github.com/joho/godotenv"
 	"log"
 	"os"
-	"time"
 )
 
 type Config struct {
@@ -22,7 +18,6 @@ type Config struct {
 
 func main() {
 
-	var router *gin.Engine = gin.New()
 	var cfg Config
 	err := godotenv.Load(".env")
 	cfg.PORT = os.Getenv("PORT")
@@ -31,6 +26,7 @@ func main() {
 	cfg.SecretAccessKey = os.Getenv("SECRET_ACCESS_KEY")
 	cfg.RedisAddress = os.Getenv("REDIS_ADDRESS")
 	log.Println(cfg.RedisAddress)
+
 	R2Client, err := server.ConnectToR2(cfg.AccessKeyID, cfg.SecretAccessKey, cfg.EndPoint)
 	if err != nil {
 		log.Fatalf("Error connecting to R2: %s", err.Error())
@@ -39,24 +35,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error connecting to Redis: %s", err.Error())
 	}
-	router.Use(gin.Logger())
 
-	corsPolicy := cors.Config{
-		AllowOrigins:     []string{"http://localhost:4200"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "authorization"},
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
-	}
-	routes.SetupRoutes(router, &server.Server{
+	controllers.StartRedisListener(&server.Server{
 		R2Client:    R2Client,
 		RedisClient: RedisClient,
 	})
-
-	router.Use(cors.New(corsPolicy))
-	err = router.Run(fmt.Sprintf("0.0.0.0:%s", cfg.PORT))
-	if err != nil {
-		log.Println(err.Error())
-	}
 }

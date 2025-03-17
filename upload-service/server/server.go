@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Sumitk99/vercel/constants"
+	"github.com/Sumitk99/vercel/upload-service/constants"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -39,18 +39,20 @@ func ConnectToR2(AccessKeyID, SecretAccessKey, Endpoint string) (*s3.Client, err
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
-	client := s3.NewFromConfig(R2Config)
+	R2Client := s3.NewFromConfig(R2Config)
 
-	return client, nil
+	return R2Client, nil
 }
 
 func ConnectToRedis(Address string) (*redis.Client, error) {
+	log.Println("connecting to redis")
 	client := redis.NewClient(&redis.Options{
 		Addr:     Address,
 		Password: "",
 		DB:       0,
 	})
-	_, err := client.Ping(context.Background()).Result()
+	res, err := client.Ping(context.Background()).Result()
+	log.Println(res, err)
 	if err != nil {
 		return nil, err
 	}
@@ -80,9 +82,10 @@ func UploadToR2(R2Client *s3.Client, baseDir string, Files []string) error {
 }
 
 func PushToRedis(RedisClient *redis.Client, projectId string) error {
-	res := RedisClient.LPush(context.Background(), projectId)
+	res := RedisClient.LPush(context.Background(), constants.BuildKey, projectId)
 	err := res.Err()
 	if err != nil {
+		log.Println("Error pushing to Redis: ", err)
 		return err
 	}
 	return nil

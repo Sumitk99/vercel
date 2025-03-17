@@ -2,7 +2,7 @@ package helper
 
 import (
 	"fmt"
-	"github.com/Sumitk99/vercel/constants"
+	"github.com/Sumitk99/vercel/upload-service/constants"
 	"github.com/go-git/go-git/v5"
 	"log"
 	"os"
@@ -10,7 +10,6 @@ import (
 )
 
 func CloneRepo(GithubUrl, ProjectId string) error {
-
 	currPath, err := os.Getwd()
 	directory := filepath.Join(currPath, constants.RepoPath, ProjectId)
 	_, err = git.PlainClone(directory, false, &git.CloneOptions{
@@ -37,10 +36,6 @@ func GetAllFiles(FolderPath string) []string {
 	})
 	if err != nil {
 		log.Println(err)
-	}
-	for _, file := range files {
-		fmt.Println(file)
-		fmt.Println(filepath.Rel(FolderPath, file))
 	}
 	return files
 }
