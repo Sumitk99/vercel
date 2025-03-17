@@ -80,9 +80,11 @@ func (srv *Server) DownloadR2Folder(ProjectID string) error {
 	if err := os.MkdirAll(path, os.ModePerm); err != nil {
 		return fmt.Errorf("failed to create local directory: %v", err)
 	}
+	log.Println(path)
 	for _, obj := range objectList.Contents {
+		log.Println(*obj.Key)
 		relativePath := strings.TrimPrefix(*obj.Key, ProjectID)
-		localFilePath := filepath.Join(curPath, relativePath)
+		localFilePath := filepath.Join(path, relativePath)
 		log.Println(relativePath, localFilePath)
 		if err := os.MkdirAll(filepath.Dir(localFilePath), os.ModePerm); err != nil {
 			return fmt.Errorf("failed to create subdirectories: %v", err)
