@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/Sumitk99/vercel/deploy-service/constants"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -14,6 +15,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 )
 
 type Server struct {
@@ -60,7 +63,7 @@ func ConnectToRedis(Address string) (*redis.Client, error) {
 	return client, nil
 }
 
-func (srv *Server) DownloadR2Folder(ProjectID string) error {
+func (srv *Server) DownloadR2Folder(ProjectID string) (*string, error) {
 	ProjectID += "/"
 
 	objectList, err := srv.R2Client.ListObjectsV2(context.Background(), &s3.ListObjectsV2Input{
@@ -68,41 +71,51 @@ func (srv *Server) DownloadR2Folder(ProjectID string) error {
 		Prefix: aws.String(ProjectID),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to list objects: %v", err)
+		return nil, fmt.Errorf("failed to list objects: %v", err)
 	}
 
 	if len(objectList.Contents) == 0 {
 		fmt.Println("Folder is empty or does not exist.")
-		return nil
+		return nil, errors.New("folder is empty or does not exist")
 	}
 	curPath, _ := os.Getwd()
 	path := filepath.Join(curPath, constants.RepoPath, ProjectID)
-	if err := os.MkdirAll(path, os.ModePerm); err != nil {
-		return fmt.Errorf("failed to create local directory: %v", err)
+	if err = os.MkdirAll(path, os.ModePerm); err != nil {
+		return nil, fmt.Errorf("failed to create local directory: %v", err)
 	}
 	log.Println(path)
+	start := time.Now()
+	wg := &sync.WaitGroup{}
 	for _, obj := range objectList.Contents {
 		log.Println(*obj.Key)
-		relativePath := strings.TrimPrefix(*obj.Key, ProjectID)
-		localFilePath := filepath.Join(path, relativePath)
-		log.Println(relativePath, localFilePath)
-		if err := os.MkdirAll(filepath.Dir(localFilePath), os.ModePerm); err != nil {
-			return fmt.Errorf("failed to create subdirectories: %v", err)
-		}
+		wg.Add(1)
 
-		err := DownloadFile(srv.R2Client, *obj.Key, localFilePath)
-		if err != nil {
-			log.Printf("Failed to download %s: %v", *obj.Key, err)
-		} else {
-			fmt.Printf("Downloaded: %s -> %s\n", *obj.Key, localFilePath)
-		}
+		go func(WaitGroup *sync.WaitGroup) {
+			relativePath := strings.TrimPrefix(*obj.Key, ProjectID)
+			localFilePath := filepath.Join(path, relativePath)
+			log.Println(relativePath, localFilePath)
+			if err = os.MkdirAll(filepath.Dir(localFilePath), os.ModePerm); err != nil {
+				log.Println("failed to create subdirectories: %v", err)
+			}
+
+			err = DownloadFileFromR2(srv.R2Client, *obj.Key, localFilePath)
+			if err != nil {
+				log.Printf("Failed to download %s: %v", *obj.Key, err)
+			} else {
+				fmt.Printf("Downloaded: %s -> %s\n", *obj.Key, localFilePath)
+			}
+			WaitGroup.Done()
+		}(wg)
+
 	}
 
-	fmt.Println("Folder downloaded successfully.")
-	return nil
+	wg.Wait()
+	time.Since(start)
+	fmt.Println("Folder downloaded successfully in ", time.Since(start), "secs")
+	return &path, nil
 }
 
-func DownloadFile(R2Client *s3.Client, key, localFilePath string) error {
+func DownloadFileFromR2(R2Client *s3.Client, key, localFilePath string) error {
 	ctx := context.TODO()
 
 	resp, err := R2Client.GetObject(ctx, &s3.GetObjectInput{
@@ -125,5 +138,37 @@ func DownloadFile(R2Client *s3.Client, key, localFilePath string) error {
 		return fmt.Errorf("failed to write file: %v", err)
 	}
 
+	return nil
+}
+
+func UploadBuildToR2(R2Client *s3.Client, baseDir, projectId string, Files []string) error {
+	start := time.Now()
+	log.Println("Base Directory : ", baseDir)
+	wg := &sync.WaitGroup{}
+	for _, file := range Files {
+		wg.Add(1)
+		go func(WaitGroup *sync.WaitGroup) {
+			newFile, _ := os.Open(file)
+			//if err != nil {
+			//	return errors.New("failed to open file")
+			//}
+			defer newFile.Close()
+			OriginalObjectKey, _ := filepath.Rel(baseDir, file)
+			outputPath := filepath.Join(constants.OutputPath, projectId, OriginalObjectKey)
+			log.Println("Uploading file: ", outputPath)
+			_, err := R2Client.PutObject(context.TODO(), &s3.PutObjectInput{
+				Bucket: aws.String(constants.Bucket),
+				Key:    aws.String(outputPath),
+				Body:   newFile,
+			})
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			WaitGroup.Done()
+		}(wg)
+	}
+	wg.Wait()
+	log.Printf("Uploading %v files took %s secs\n", len(Files), time.Since(start))
 	return nil
 }

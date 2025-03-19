@@ -43,7 +43,7 @@ func Controller(srv *server.Server) gin.HandlerFunc {
 			}
 			err = exec.Command("rm", "-rf", fmt.Sprintf("%s/%s", constants.RepoPath, projectId)).Run()
 			log.Println("Pushing to Redis Queue")
-			err = server.PushToRedis(srv.RedisClient, projectId)
+			err = server.PushToRedis(srv.RedisClient, projectId, req.Framework)
 			log.Println("Pushed to Redis Queue")
 		}()
 

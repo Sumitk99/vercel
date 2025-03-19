@@ -2,9 +2,10 @@ package server
 
 import (
 	"context"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"github.com/Sumitk99/vercel/upload-service/constants"
+	"github.com/Sumitk99/vercel/upload-service/models"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -13,6 +14,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
+	"time"
 )
 
 type Server struct {
@@ -25,8 +28,8 @@ func ConnectToR2(AccessKeyID, SecretAccessKey, Endpoint string) (*s3.Client, err
 	R2Config, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithRegion("auto"),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-			AccessKeyID,     // Replace with your Cloudflare R2 Access Key ID
-			SecretAccessKey, // Replace with your Cloudflare R2 Secret Access Key
+			AccessKeyID,
+			SecretAccessKey,
 			"",
 		)),
 		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
@@ -60,30 +63,42 @@ func ConnectToRedis(Address string) (*redis.Client, error) {
 }
 
 func UploadToR2(R2Client *s3.Client, baseDir string, Files []string) error {
+	start := time.Now()
+	wg := &sync.WaitGroup{}
 	for _, file := range Files {
-		newFile, err := os.Open(file)
-		if err != nil {
-			return errors.New("failed to open file")
-		}
-		defer newFile.Close()
-		objectKey, err := filepath.Rel(baseDir, file)
-		log.Println("Uploading file: ", objectKey)
-		_, err = R2Client.PutObject(context.TODO(), &s3.PutObjectInput{
-			Bucket: aws.String(constants.Bucket),
-			Key:    aws.String(objectKey),
-			Body:   newFile,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to upload file: %w", err)
-		}
-
+		wg.Add(1)
+		go func(WaitGroup *sync.WaitGroup) {
+			newFile, _ := os.Open(file)
+			//if err != nil {
+			//	return errors.New("failed to open file")
+			//}
+			defer newFile.Close()
+			objectKey, _ := filepath.Rel(baseDir, file)
+			log.Println("Uploading file: ", objectKey)
+			_, _ = R2Client.PutObject(context.TODO(), &s3.PutObjectInput{
+				Bucket: aws.String(constants.Bucket),
+				Key:    aws.String(objectKey),
+				Body:   newFile,
+			})
+			WaitGroup.Done()
+		}(wg)
 	}
+	wg.Wait()
+	log.Printf("Cloning %v took %s secs\n", len(Files), time.Since(start))
 	return nil
 }
 
-func PushToRedis(RedisClient *redis.Client, projectId string) error {
-	res := RedisClient.LPush(context.Background(), constants.BuildKey, projectId)
-	err := res.Err()
+func PushToRedis(RedisClient *redis.Client, ProjectID, Framework string) error {
+	data, err := json.Marshal(
+		models.RedisObject{
+			ProjectId: ProjectID,
+			Framework: Framework,
+		})
+	if err != nil {
+		log.Println("Error marshalling data: ", err)
+	}
+	res := RedisClient.LPush(context.Background(), constants.BuildKey, data)
+	err = res.Err()
 	if err != nil {
 		log.Println("Error pushing to Redis: ", err)
 		return err

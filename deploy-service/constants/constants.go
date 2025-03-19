@@ -1,7 +1,8 @@
 package constants
 
 const (
-	RepoPath = "repo"
-	Bucket   = "vercel"
-	BuildKey = "build"
+	RepoPath   = "repo"
+	Bucket     = "vercel"
+	BuildKey   = "build"
+	OutputPath = "output"
 )
