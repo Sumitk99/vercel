@@ -8,6 +8,6 @@ import (
 )
 
 func SetupRoutes(router *gin.Engine, srv *server.Server) {
-	router.GET("/deploy", controllers.Controller(srv))
+	router.POST("/deploy", controllers.Controller(srv))
 	router.GET("/status/:projectId", controllers.FetchStatus(srv))
 }

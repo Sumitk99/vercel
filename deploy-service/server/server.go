@@ -149,9 +149,6 @@ func UploadBuildToR2(R2Client *s3.Client, baseDir, projectId string, Files []str
 		wg.Add(1)
 		go func(WaitGroup *sync.WaitGroup) {
 			newFile, _ := os.Open(file)
-			//if err != nil {
-			//	return errors.New("failed to open file")
-			//}
 			defer newFile.Close()
 			OriginalObjectKey, _ := filepath.Rel(baseDir, file)
 			outputPath := filepath.Join(constants.OutputPath, projectId, OriginalObjectKey)

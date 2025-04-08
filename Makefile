@@ -1,4 +1,4 @@
-deploy:
+deploy: // Inlcude Testing
 	@go run deploy-service/cmd/deploy/main.go
 
 upload:
